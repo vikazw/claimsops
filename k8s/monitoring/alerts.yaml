@@ -1,0 +1,36 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: claims-alerts
+  namespace: claims
+  labels:
+    release: mon
+spec:
+  groups:
+  - name: claims-api
+    rules:
+    - alert: ClaimsPodNotReady
+      expr: kube_pod_status_ready{namespace="claims", condition="false"} == 1
+      for: 2m
+      labels: {severity: warning}
+      annotations:
+        summary: "{{ $labels.pod }} has not been ready for 2 minutes"
+        runbook: "docs/runbooks/pod-not-ready.md"
+    - alert: ClaimsHighErrorRate
+      expr: |
+        sum(rate(http_requests_total{namespace="claims", status="5xx"}[5m]))
+          / sum(rate(http_requests_total{namespace="claims"}[5m])) > 0.05
+      for: 5m
+      labels: {severity: critical}
+      annotations:
+        summary: "More than 5% of claims API requests are failing"
+    - alert: ClaimsPodRestarting
+      expr: increase(kube_pod_container_status_restarts_total{namespace="claims"}[15m]) > 2
+      labels: {severity: warning}
+      annotations:
+        summary: "{{ $labels.pod }} restarted more than twice in 15 minutes"
+    - alert: ClaimsContainerOOMKilled
+      expr: kube_pod_container_status_last_terminated_reason{namespace="claims", reason="OOMKilled"} == 1
+      labels: {severity: warning}
+      annotations:
+        summary: "{{ $labels.container }} in {{ $labels.pod }} was OOMKilled"
